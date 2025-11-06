@@ -1,0 +1,65 @@
+# Ignore files and directories for Docker build
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+README_ELIBRARY.md
+DOCKER_SETUP.md
+
+# Development files
+.env
+.env.local
+.env.development
+test_setup.php
+
+# Dependencies
+node_modules/
+vendor/ 
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+writable/logs/*
+!writable/logs/index.html
+
+# Cache
+writable/cache/*
+!writable/cache/index.html
+
+# Sessions
+writable/session/*
+!writable/session/index.html
+
+# Uploads (will be mounted as volume)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Testing
+tests/
+phpunit.xml
+phpunit.xml.dist
+.phpunit.result.cache
+
+# Other
+*.backup
+*.tmp
+*.temp

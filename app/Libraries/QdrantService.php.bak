@@ -1,0 +1,237 @@
+<?php
+
+namespace App\Libraries;
+
+use Qdrant\Client;
+use Qdrant\Models\Request\CreateCollection;
+use Qdrant\Models\Request\SearchRequest;
+use Qdrant\Models\Request\VectorParams;
+use Qdrant\Models\PointStruct;
+use Qdrant\Models\Distance;
+
+class QdrantService
+{
+    protected Client $client;
+    protected string $host;
+    protected int $port;
+    protected int $vectorDimension = 1536; // Default for OpenAI embeddings
+
+    public function __construct()
+    {
+        $this->host = getenv('QDRANT_HOST') ?: 'qdrant';
+        $this->port = (int)(getenv('QDRANT_PORT') ?: 6333);
+        
+        $this->client = new Client("http://{$this->host}:{$this->port}");
+    }
+
+    /**
+     * Create a collection for storing vectors
+     *
+     * @param string $collectionName Name of the collection
+     * @param int $vectorSize Size of vectors
+     * @return bool Success status
+     */
+    public function createCollection(string $collectionName, int $vectorSize = null): bool
+    {
+        try {
+            $vectorSize = $vectorSize ?? $this->vectorDimension;
+            
+            $createCollection = new CreateCollection();
+            $createCollection->addVector(
+                new VectorParams($vectorSize, Distance::COSINE),
+                'content'
+            );
+
+            $this->client->collections($collectionName)->create($createCollection);
+            
+            log_message('info', "Qdrant collection created: {$collectionName}");
+            return true;
+        } catch (\Exception $e) {
+            log_message('error', 'Qdrant collection creation failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if collection exists
+     *
+     * @param string $collectionName Name of the collection
+     * @return bool True if exists
+     */
+    public function collectionExists(string $collectionName): bool
+    {
+        try {
+            $collections = $this->client->collections()->list();
+            foreach ($collections as $collection) {
+                if ($collection['name'] === $collectionName) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (\Exception $e) {
+            log_message('error', 'Qdrant collection check failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Insert vectors into collection
+     *
+     * @param string $collectionName Name of the collection
+     * @param array $points Array of points with vectors and payloads
+     * @return bool Success status
+     */
+    public function insertVectors(string $collectionName, array $points): bool
+    {
+        try {
+            $pointStructs = [];
+            
+            foreach ($points as $index => $point) {
+                $pointStructs[] = new PointStruct(
+                    (int)($point['id'] ?? $index),
+                    $point['vector'],
+                    $point['payload'] ?? []
+                );
+            }
+
+            $this->client->collections($collectionName)
+                ->points()
+                ->upsert($pointStructs);
+            
+            log_message('info', "Inserted " . count($pointStructs) . " vectors into {$collectionName}");
+            return true;
+        } catch (\Exception $e) {
+            log_message('error', 'Qdrant vector insertion failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Search for similar vectors
+     *
+     * @param string $collectionName Name of the collection
+     * @param array $queryVector Query vector
+     * @param int $limit Number of results
+     * @param array $filter Optional filter conditions
+     * @return array Search results
+     */
+    public function search(string $collectionName, array $queryVector, int $limit = 5, array $filter = []): array
+    {
+        try {
+            $searchRequest = new SearchRequest($queryVector, $limit);
+            
+            if (!empty($filter)) {
+                $searchRequest->setFilter($filter);
+            }
+            
+            $searchRequest->setWithPayload(true);
+            $searchRequest->setWithVector(false);
+
+            $results = $this->client->collections($collectionName)
+                ->points()
+                ->search($searchRequest);
+
+            return $this->formatSearchResults($results);
+        } catch (\Exception $e) {
+            log_message('error', 'Qdrant search failed: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Delete a collection
+     *
+     * @param string $collectionName Name of the collection
+     * @return bool Success status
+     */
+    public function deleteCollection(string $collectionName): bool
+    {
+        try {
+            $this->client->collections($collectionName)->delete();
+            log_message('info', "Qdrant collection deleted: {$collectionName}");
+            return true;
+        } catch (\Exception $e) {
+            log_message('error', 'Qdrant collection deletion failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get collection info
+     *
+     * @param string $collectionName Name of the collection
+     * @return array Collection information
+     */
+    public function getCollectionInfo(string $collectionName): array
+    {
+        try {
+            $info = $this->client->collections($collectionName)->info();
+            return [
+                'name'         => $collectionName,
+                'vectors_count' => $info['vectors_count'] ?? 0,
+                'points_count'  => $info['points_count'] ?? 0,
+                'status'        => $info['status'] ?? 'unknown',
+            ];
+        } catch (\Exception $e) {
+            log_message('error', 'Qdrant collection info failed: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Format search results
+     *
+     * @param array $results Raw search results
+     * @return array Formatted results
+     */
+    protected function formatSearchResults(array $results): array
+    {
+        $formatted = [];
+        
+        foreach ($results as $result) {
+            $formatted[] = [
+                'id'      => $result['id'] ?? null,
+                'score'   => $result['score'] ?? 0,
+                'payload' => $result['payload'] ?? [],
+            ];
+        }
+
+        return $formatted;
+    }
+
+    /**
+     * Create embeddings using simple hash (placeholder)
+     * In production, use proper embedding API (OpenAI, etc.)
+     *
+     * @param string $text Text to embed
+     * @return array Vector embedding
+     */
+    public function createSimpleEmbedding(string $text): array
+    {
+        // This is a placeholder. In production, use:
+        // - OpenAI Embeddings API
+        // - Sentence Transformers
+        // - Other embedding models
+        
+        // Simple hash-based embedding for demo
+        $hash = md5($text);
+        $vector = [];
+        
+        for ($i = 0; $i < $this->vectorDimension; $i++) {
+            $byte = hexdec(substr($hash, $i % 32, 2));
+            $vector[] = ($byte / 255.0) * 2 - 1; // Normalize to [-1, 1]
+        }
+        
+        return $vector;
+    }
+
+    /**
+     * Set vector dimension
+     *
+     * @param int $dimension Vector dimension size
+     */
+    public function setVectorDimension(int $dimension): void
+    {
+        $this->vectorDimension = $dimension;
+    }
+}

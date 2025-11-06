@@ -1,0 +1,141 @@
+name: Tests
+
+on:
+  push:
+    branches: [ '**' ]
+  pull_request:
+    branches: [ '**' ]
+
+jobs:
+  unit-tests:
+    name: Unit Tests (PHP ${{ matrix.php-versions }})
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: ['8.1', '8.2', '8.3']
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: elibrary_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-versions }}
+        extensions: intl, mbstring, pdo_mysql, mysqli, gd, zip
+        coverage: xdebug
+
+    - name: Validate composer.json
+      run: composer validate --strict
+
+    - name: Cache Composer packages
+      uses: actions/cache@v4
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ matrix.php-versions }}-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-${{ matrix.php-versions }}-
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+
+    - name: Setup environment
+      run: |
+        cp env .env
+        sed -i 's/CI_ENVIRONMENT = production/CI_ENVIRONMENT = testing/' .env
+        sed -i 's/database.default.hostname = localhost/database.default.hostname = 127.0.0.1/' .env
+        sed -i 's/database.default.database = elibrary_db/database.default.database = elibrary_test/' .env
+        sed -i 's/database.default.username = root/database.default.username = root/' .env
+        sed -i 's/database.default.password =/database.default.password = root/' .env
+        sed -i 's/# database.default.DBDriver = MySQLi/database.default.DBDriver = MySQLi/' .env
+
+    - name: Run migrations
+      run: php spark migrate --all
+
+    - name: Run PHPUnit tests
+      run: vendor/bin/phpunit --testdox
+
+  feature-tests:
+    name: Feature Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: elibrary_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: intl, mbstring, pdo_mysql, mysqli, gd, zip
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+
+    - name: Setup environment
+      run: |
+        cp env .env
+        sed -i 's/CI_ENVIRONMENT = production/CI_ENVIRONMENT = testing/' .env
+        sed -i 's/database.default.hostname = localhost/database.default.hostname = 127.0.0.1/' .env
+        sed -i 's/database.default.database = elibrary_db/database.default.database = elibrary_test/' .env
+        sed -i 's/database.default.username = root/database.default.username = root/' .env
+        sed -i 's/database.default.password =/database.default.password = root/' .env
+        sed -i 's/# database.default.DBDriver = MySQLi/database.default.DBDriver = MySQLi/' .env
+
+    - name: Run migrations
+      run: php spark migrate --all
+
+    - name: Run feature tests
+      run: vendor/bin/phpunit --testsuite feature --testdox
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+
+    - name: Security check
+      run: |
+        composer require --dev enlightn/security-checker
+        vendor/bin/security-checker security:check composer.lock
+      continue-on-error: true

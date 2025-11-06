@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Web Application
+  app:
+    build: .
+    container_name: elibrary-app
+    ports:
+      - "8080:80"
+    volumes:
+      # Bind-mount the source code so changes on host reflect immediately in the container
+      - ./:/var/www/html
+      # Keep vendor as a named volume so container dependencies are not overridden by host
+      - vendor:/var/www/html/vendor
+      # Persist uploads and writable directories
+      - ./public/uploads:/var/www/html/public/uploads
+      - ./writable:/var/www/html/writable
+    environment:
+      - CI_ENVIRONMENT=development
+      - DB_HOSTNAME=db
+      - DB_DATABASE=elibrary_db
+      - DB_USERNAME=elibrary_user
+      - DB_PASSWORD=elibrary_pass
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - DEEPSEEK_API_KEY=sk-2d98910d23094d52bd41f300d92bf0ec
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - elibrary-network
+
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: elibrary-db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: elibrary_db
+      MYSQL_USER: elibrary_user
+      MYSQL_PASSWORD: elibrary_pass
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - elibrary-network
+
+  # phpMyAdmin
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    platform: linux/amd64
+    container_name: elibrary-phpmyadmin
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root_password
+    depends_on:
+      - db
+    networks:
+      - elibrary-network
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: elibrary-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - elibrary-network
+
+volumes:
+  db_data:
+  qdrant_data:
+  vendor:
+
+networks:
+  elibrary-network:
+    driver: bridge
