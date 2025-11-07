@@ -19,6 +19,22 @@ docker-compose up --build -d
 echo "⏳ Waiting for services to start..."
 sleep 10
 
+# Fix cache directory permissions
+echo "🔧 Fixing writable directory permissions..."
+docker exec elibrary-app bash -c "mkdir -p /var/www/html/writable/cache && chmod -R 777 /var/www/html/writable"
+
+# Run database migrations and seeding (only if needed)
+echo "🗄️  Checking database status..."
+if docker exec elibrary-app php spark migrate:status | grep -q "| 0"; then
+    echo "📊 Running database migrations..."
+    docker exec elibrary-app php spark migrate --all
+    echo "🌱 Seeding database with demo data..."
+    docker exec elibrary-app php spark db:seed UserSeeder
+    echo "✅ Database initialized successfully!"
+else
+    echo "ℹ️  Database already initialized, skipping migration and seeding."
+fi
+
 # Show status
 echo ""
 echo "✅ E-Library is now running!"
