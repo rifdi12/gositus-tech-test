@@ -2,6 +2,26 @@
 
 Aplikasi perpustakaan digital yang dibangun menggunakan **CodeIgniter 4** dan **Bootstrap 5**.
 
+## Key feature
+
+**Authentication**
+```bash 
+https://github.com/user-attachments/assets/5d1fe3db-b578-446e-b867-0d048fba6ffa
+```
+
+**Registration**
+```bash 
+https://github.com/user-attachments/assets/307aecb1-f8ff-46d5-a373-7184d99a4065
+```
+**Navbar**
+```bash
+https://github.com/user-attachments/assets/427bf741-379c-4bfd-932d-d1d0af9efeb0
+```
+**Upload Books and AI chat**
+```bash
+https://github.com/user-attachments/assets/eda771d5-c4eb-4726-a7fb-357a13753a5a
+```
+
 ## 🚀 Quick Start dengan Docker (Recommended)
 
 **Cara tercepat untuk menjalankan aplikasi:**
